@@ -16,6 +16,6 @@ WORKDIR /app
 
 COPY --from=builder /app/zzs-statistika .
 
-EXPOSE 8082
+EXPOSE 8003
 
 CMD ["./zzs-statistika"]

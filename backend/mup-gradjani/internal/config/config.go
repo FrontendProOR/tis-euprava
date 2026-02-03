@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
 )
 
+// Config sadrži sve konfiguracione parametre servisa
 type Config struct {
-	ServiceName string
-	HTTPPort    string
+	ServiceName string // naziv servisa, npr "mup-gradjani"
+	HTTPPort    string // port na kojem servis sluša, npr "8002"
 
+	// PostgreSQL konekcija
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -19,9 +21,10 @@ type Config struct {
 	DBName     string
 }
 
-func Load() *Config {
+// LoadConfig učitava konfiguraciju iz environment varijabli
+func LoadConfig() *Config {
 	return &Config{
-		ServiceName: os.Getenv("SERVICE_NAME"),
+		ServiceName: getEnv("SERVICE_NAME", "service"),
 		HTTPPort:    getEnv("HTTP_PORT", "8080"),
 
 		DBHost:     getEnv("DB_HOST", "localhost"),
@@ -32,6 +35,7 @@ func Load() *Config {
 	}
 }
 
+// OpenDB otvara konekciju sa PostgreSQL bazom
 func OpenDB(cfg *Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -44,19 +48,20 @@ func OpenDB(cfg *Config) (*sql.DB, error) {
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ne mogu da se povežem na DB: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("DB ping neuspešan: %w", err)
 	}
 
 	return db, nil
 }
 
-func getEnv(key, def string) string {
+// getEnv vraća vrednost env varijable ili fallback ako nije postavljena
+func getEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
 	}
-	return def
+	return fallback
 }

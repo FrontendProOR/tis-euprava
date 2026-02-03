@@ -16,6 +16,6 @@ WORKDIR /app
 
 COPY --from=builder /app/sso-auth .
 
-EXPOSE 8081
+EXPOSE 8001
 
 CMD ["./sso-auth"]
