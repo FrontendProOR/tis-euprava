@@ -1,0 +1,34 @@
+services:
+  mup-service:
+    build:
+      context: ./backend/mup-gradjani
+    container_name: mup-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - sso-service
+      - zzs-service
+    networks:
+      - euprava-net
+
+  sso-service:
+    build:
+      context: ./backend/sso-auth
+    container_name: sso-service
+    ports:
+      - "8081:8081"
+    networks:
+      - euprava-net
+
+  zzs-service:
+    build:
+      context: ./backend/zzs-statistika
+    container_name: zzs-service
+    ports:
+      - "8082:8082"
+    networks:
+      - euprava-net
+
+networks:
+  euprava-net:
+    driver: bridge
