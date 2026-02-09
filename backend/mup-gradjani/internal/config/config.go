@@ -12,7 +12,7 @@ import (
 type Config struct {
 	ServiceName string // naziv servisa, npr "mup-gradjani"
 	HTTPPort    string // port na kojem servis sluša, npr "8002"
-
+	SSOBaseURL  string
 	// PostgreSQL konekcija
 	DBHost     string
 	DBPort     string

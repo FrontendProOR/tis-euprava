@@ -95,3 +95,27 @@ func (r *PostgresCitizenRepository) FindByJMBG(jmbg string) (*domain.Citizen, er
 	_ = json.Unmarshal(addressJSON, &c.Address)
 	return &c, nil
 }
+
+func (r *PostgresCitizenRepository) List() ([]domain.Citizen, error) {
+	rows, err := r.db.Query(`
+		SELECT id, jmbg, first_name, last_name, date_of_birth, email, phone_number, address, created_at
+		FROM citizens
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Citizen, 0)
+	for rows.Next() {
+		var c domain.Citizen
+		var addressJSON []byte
+		if err := rows.Scan(&c.ID, &c.JMBG, &c.FirstName, &c.LastName, &c.DateOfBirth, &c.Email, &c.PhoneNumber, &addressJSON, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(addressJSON, &c.Address)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}

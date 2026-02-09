@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"tis-euprava/mup-gradjani/internal/service"
 )
 
 type createRequestDTO struct {
@@ -23,8 +23,10 @@ type requestResponse struct {
 	ProcessedAt *time.Time `json:"processedAt,omitempty"`
 }
 
-func Requests(db *sql.DB) http.HandlerFunc {
+// /api/requests  -> GET, POST
+func Requests(svc *service.RequestService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+
 		switch r.Method {
 
 		case http.MethodPost:
@@ -33,54 +35,23 @@ func Requests(db *sql.DB) http.HandlerFunc {
 				http.Error(w, "invalid json", http.StatusBadRequest)
 				return
 			}
-			if dto.CitizenID == "" || dto.Type == "" {
-				http.Error(w, "citizenId and type are required", http.StatusBadRequest)
-				return
-			}
 
-			id := uuid.NewString()
-			now := time.Now().UTC()
-
-			_, err := db.Exec(`
-				INSERT INTO service_requests (id, citizen_id, type, status, submitted_at)
-				VALUES ($1,$2,$3,$4,$5)
-			`, id, dto.CitizenID, dto.Type, "SUBMITTED", now)
+			req, err := svc.CreateRequest(dto.CitizenID, dto.Type)
 			if err != nil {
-				http.Error(w, "db error: "+err.Error(), http.StatusInternalServerError)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(requestResponse{
-				ID:          id,
-				CitizenID:   dto.CitizenID,
-				Type:        dto.Type,
-				Status:      "SUBMITTED",
-				SubmittedAt: now,
-			})
+			_ = json.NewEncoder(w).Encode(req)
 			return
 
 		case http.MethodGet:
-			rows, err := db.Query(`
-				SELECT id, citizen_id, type, status, submitted_at, processed_at
-				FROM service_requests
-				ORDER BY submitted_at DESC
-			`)
+			list, err := svc.GetAll()
 			if err != nil {
-				http.Error(w, "db error: "+err.Error(), http.StatusInternalServerError)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
-			}
-			defer rows.Close()
-
-			list := make([]requestResponse, 0)
-			for rows.Next() {
-				var x requestResponse
-				if err := rows.Scan(&x.ID, &x.CitizenID, &x.Type, &x.Status, &x.SubmittedAt, &x.ProcessedAt); err != nil {
-					http.Error(w, "db error: "+err.Error(), http.StatusInternalServerError)
-					return
-				}
-				list = append(list, x)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
@@ -89,7 +60,31 @@ func Requests(db *sql.DB) http.HandlerFunc {
 
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+// /api/requests/{id} -> GET
+func RequestByID(svc *service.RequestService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+
+		id := strings.TrimPrefix(r.URL.Path, "/api/requests/")
+		if id == "" || strings.Contains(id, "/") {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+
+		req, err := svc.GetByID(id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(req)
 	}
 }

@@ -1,23 +1,36 @@
 package api
 
 import (
-	"database/sql"
 	"net/http"
 
 	"tis-euprava/mup-gradjani/internal/api/handlers"
+	"tis-euprava/mup-gradjani/internal/service"
 )
 
-func RegisterRoutes(mux *http.ServeMux, db *sql.DB) {
-	// Health check
+func RegisterRoutes(
+	mux *http.ServeMux,
+	reqSvc *service.RequestService,
+	citizenSvc *service.CitizenService,
+	apptSvc *service.AppointmentService,
+	paySvc *service.PaymentService,
+	certSvc *service.CertificateService,
+) {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
 
-	// Requests collection: GET list, POST create
-	mux.HandleFunc("/api/requests", handlers.Requests(db))
+	// ✅ MUP API - BEZ AUTH
+
+	mux.Handle("/api/requests", handlers.Requests(reqSvc))
+	mux.Handle("/api/requests/", RequestRouter(reqSvc, certSvc))
+
+	mux.Handle("/api/citizens", handlers.Citizens(citizenSvc))
+	mux.Handle("/api/citizens/", handlers.CitizenByID(citizenSvc))
+
+	mux.Handle("/api/appointments", handlers.Appointments(apptSvc))
+	mux.Handle("/api/appointments/", handlers.AppointmentByID(apptSvc))
+
+	mux.Handle("/api/payments", handlers.Payments(paySvc))
+
 }

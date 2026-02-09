@@ -15,11 +15,14 @@ func NewPostgresRequestRepository(db *sql.DB) *PostgresRequestRepository {
 	return &PostgresRequestRepository{db: db}
 }
 
+// compile-time check
+var _ RequestRepository = (*PostgresRequestRepository)(nil)
+
 func (r *PostgresRequestRepository) Create(req *domain.ServiceRequest) error {
 	query := `
 		INSERT INTO service_requests
-		(id, citizen_id, type, status, submitted_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6)
+		(id, citizen_id, type, status, submitted_at)
+		VALUES ($1,$2,$3,$4,$5)
 	`
 
 	_, err := r.db.Exec(
@@ -29,17 +32,46 @@ func (r *PostgresRequestRepository) Create(req *domain.ServiceRequest) error {
 		req.Type,
 		req.Status,
 		req.SubmittedAt,
-		// req.UpdatedAt,
 	)
 
 	return err
+}
+
+func (r *PostgresRequestRepository) GetAll() ([]domain.ServiceRequest, error) {
+	rows, err := r.db.Query(`
+		SELECT id, citizen_id, type, status, submitted_at, processed_at
+		FROM service_requests
+		ORDER BY submitted_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.ServiceRequest
+	for rows.Next() {
+		var req domain.ServiceRequest
+		if err := rows.Scan(
+			&req.ID,
+			&req.CitizenID,
+			&req.Type,
+			&req.Status,
+			&req.SubmittedAt,
+			&req.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, req)
+	}
+
+	return list, rows.Err()
 }
 
 func (r *PostgresRequestRepository) FindByID(id string) (*domain.ServiceRequest, error) {
 	var req domain.ServiceRequest
 
 	query := `
-		SELECT id, citizen_id, type, status, submitted_at, updated_at
+		SELECT id, citizen_id, type, status, submitted_at, processed_at
 		FROM service_requests
 		WHERE id = $1
 	`
@@ -50,7 +82,7 @@ func (r *PostgresRequestRepository) FindByID(id string) (*domain.ServiceRequest,
 		&req.Type,
 		&req.Status,
 		&req.SubmittedAt,
-		// &req.UpdatedAt,
+		&req.ProcessedAt,
 	)
 
 	if err != nil {
@@ -62,7 +94,7 @@ func (r *PostgresRequestRepository) FindByID(id string) (*domain.ServiceRequest,
 
 func (r *PostgresRequestRepository) FindByCitizenID(citizenID string) ([]domain.ServiceRequest, error) {
 	rows, err := r.db.Query(`
-		SELECT id, citizen_id, type, status, submitted_at, updated_at
+		SELECT id, citizen_id, type, status, submitted_at, processed_at
 		FROM service_requests
 		WHERE citizen_id = $1
 	`, citizenID)
@@ -71,8 +103,7 @@ func (r *PostgresRequestRepository) FindByCitizenID(citizenID string) ([]domain.
 	}
 	defer rows.Close()
 
-	var requests []domain.ServiceRequest
-
+	var list []domain.ServiceRequest
 	for rows.Next() {
 		var req domain.ServiceRequest
 		if err := rows.Scan(
@@ -81,23 +112,41 @@ func (r *PostgresRequestRepository) FindByCitizenID(citizenID string) ([]domain.
 			&req.Type,
 			&req.Status,
 			&req.SubmittedAt,
-			// &req.UpdatedAt,
+			&req.ProcessedAt,
 		); err != nil {
 			return nil, err
 		}
-		requests = append(requests, req)
+		list = append(list, req)
 	}
 
-	return requests, nil
+	return list, rows.Err()
 }
 
+// UpdateStatus:
+// - uvek update-uje status
+// - processed_at se setuje SAMO za APPROVED/REJECTED, inače NULL
 func (r *PostgresRequestRepository) UpdateStatus(id string, status domain.RequestStatus) error {
+	var processedAt any = nil
+
+	if status == domain.RequestApproved || status == domain.RequestRejected {
+		processedAt = time.Now().UTC()
+	}
+
 	query := `
 		UPDATE service_requests
-		SET status = $1, updated_at = $2
+		SET status = $1, processed_at = $2
 		WHERE id = $3
 	`
 
-	_, err := r.db.Exec(query, status, time.Now(), id)
-	return err
+	res, err := r.db.Exec(query, status, processedAt, id)
+	if err != nil {
+		return err
+	}
+
+	affected, err := res.RowsAffected()
+	if err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }

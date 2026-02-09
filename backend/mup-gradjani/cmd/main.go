@@ -7,6 +7,8 @@ import (
 
 	"tis-euprava/mup-gradjani/internal/api"
 	"tis-euprava/mup-gradjani/internal/config"
+	"tis-euprava/mup-gradjani/internal/repository"
+	"tis-euprava/mup-gradjani/internal/service"
 )
 
 func main() {
@@ -25,11 +27,31 @@ func main() {
 	log.Println("Povezano na PostgreSQL bazu uspešno!")
 	log.Printf("Servis '%s' sluša na portu %s\n", cfg.ServiceName, cfg.HTTPPort)
 
-	// 3) Router (ServeMux)
-	mux := http.NewServeMux()
-	api.RegisterRoutes(mux, db)
+	// 3) Repository + Service
+	requestRepo := repository.NewPostgresRequestRepository(db)
+	citizenRepo := repository.NewPostgresCitizenRepository(db)
+	appointmentRepo := repository.NewPostgresAppointmentRepository(db)
+	paymentRepo := repository.NewPostgresPaymentRepository(db)
+	certificateRepo := repository.NewPostgresCertificateRepository(db)
 
-	// 4) HTTP server )
+	requestService := service.NewRequestService(requestRepo)
+	citizenService := service.NewCitizenService(citizenRepo)
+	appointmentService := service.NewAppointmentService(appointmentRepo)
+	paymentService := service.NewPaymentService(paymentRepo, requestRepo)
+	certificateService := service.NewCertificateService(certificateRepo, requestRepo, paymentRepo)
+
+	// 4) Router (BEZ SSO / auth)
+	mux := http.NewServeMux()
+	api.RegisterRoutes(
+		mux,
+		requestService,
+		citizenService,
+		appointmentService,
+		paymentService,
+		certificateService,
+	)
+
+	// 5) HTTP server
 	srv := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
 		Handler:           mux,
