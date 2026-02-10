@@ -8,7 +8,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-        
+
   sso-service:
     build: ./backend/sso-auth
     container_name: sso-service
@@ -46,9 +46,19 @@ services:
       timeout: 5s
       retries: 10
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: "http://mup-service:8002"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - mup-service
+
 volumes:
   postgres_data:
-
-networks:
-  euprava-network:
-    driver: bridge

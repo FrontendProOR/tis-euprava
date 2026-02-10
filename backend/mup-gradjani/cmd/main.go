@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/rs/cors"
+
 	"tis-euprava/mup-gradjani/internal/api"
 	"tis-euprava/mup-gradjani/internal/config"
 	"tis-euprava/mup-gradjani/internal/repository"
@@ -14,10 +16,8 @@ import (
 func main() {
 	log.Println("MUP service started")
 
-	// 1) Load config (.env)
 	cfg := config.LoadConfig()
 
-	// 2) Open DB connection
 	db, err := config.OpenDB(cfg)
 	if err != nil {
 		log.Fatalf("Greška pri otvaranju DB konekcije: %v", err)
@@ -27,20 +27,25 @@ func main() {
 	log.Println("Povezano na PostgreSQL bazu uspešno!")
 	log.Printf("Servis '%s' sluša na portu %s\n", cfg.ServiceName, cfg.HTTPPort)
 
-	// 3) Repository + Service
+	// Repositories
 	requestRepo := repository.NewPostgresRequestRepository(db)
 	citizenRepo := repository.NewPostgresCitizenRepository(db)
 	appointmentRepo := repository.NewPostgresAppointmentRepository(db)
 	paymentRepo := repository.NewPostgresPaymentRepository(db)
 	certificateRepo := repository.NewPostgresCertificateRepository(db)
 
+	// Services
 	requestService := service.NewRequestService(requestRepo)
 	citizenService := service.NewCitizenService(citizenRepo)
 	appointmentService := service.NewAppointmentService(appointmentRepo)
 	paymentService := service.NewPaymentService(paymentRepo, requestRepo)
-	certificateService := service.NewCertificateService(certificateRepo, requestRepo, paymentRepo)
+	certificateService := service.NewCertificateService(
+		certificateRepo,
+		requestRepo,
+		paymentRepo,
+	)
 
-	// 4) Router (BEZ SSO / auth)
+	// Router
 	mux := http.NewServeMux()
 	api.RegisterRoutes(
 		mux,
@@ -51,10 +56,31 @@ func main() {
 		certificateService,
 	)
 
-	// 5) HTTP server
+	// ✅ CORS WRAPPER (OVO TI JE FALILO)
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{
+			"http://localhost:5173", // React (Vite)
+		},
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Content-Type",
+			"Authorization",
+		},
+	})
+
+	handler := c.Handler(mux)
+
+	// HTTP server
 	srv := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           mux,
+		Handler:           handler, // ⬅️ BITNO
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
