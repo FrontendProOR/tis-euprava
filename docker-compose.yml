@@ -8,6 +8,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - euprava-net
 
   sso-service:
     build: ./backend/sso-auth
@@ -18,6 +20,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - euprava-net
 
   zzs-service:
     build: ./backend/zzs-statistika
@@ -28,6 +32,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - euprava-net
 
   postgres:
     image: postgres:15
@@ -45,6 +51,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - euprava-net
 
   frontend:
     build:
@@ -53,12 +61,18 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: "http://mup-service:8002"
+      VITE_API_URL: "http://localhost:8002"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
       - mup-service
+    networks:
+      - euprava-net
 
 volumes:
   postgres_data:
+
+networks:
+  euprava-net:
+    driver: bridge
