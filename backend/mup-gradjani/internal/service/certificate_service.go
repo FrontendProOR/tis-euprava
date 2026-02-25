@@ -31,8 +31,8 @@ func (s *CertificateService) GenerateCertificate(requestID string) ([]byte, erro
 	if err != nil {
 		return nil, errors.New("request not found")
 	}
-	if req.Status != domain.RequestApproved {
-		return nil, errors.New("request must be APPROVED")
+	if req.Status != domain.RequestApproved && req.Status != domain.RequestCompleted {
+		return nil, errors.New("request must be APPROVED (or already COMPLETED)")
 	}
 
 	pay, err := s.payments.FindByRequestID(requestID)
@@ -76,6 +76,12 @@ func (s *CertificateService) GenerateCertificate(requestID string) ([]byte, erro
 
 	if err := s.certs.Create(cert); err != nil {
 		return nil, err
+	}
+
+	// mark request as COMPLETED after certificate is issued (per UML)
+	if req.Status != domain.RequestCompleted {
+		now := time.Now().UTC()
+		_ = s.requests.UpdateStatus(requestID, domain.RequestCompleted, &now)
 	}
 	return pdf, nil
 }

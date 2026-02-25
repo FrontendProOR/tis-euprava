@@ -1,6 +1,5 @@
 const API = import.meta.env.VITE_API_URL;
 
-// ✅ Named exports (da radi: import { apiGet } from "./http")
 export async function apiGet(path) {
   const res = await fetch(`${API}${path}`);
   if (!res.ok) throw new Error(await res.text());
@@ -33,7 +32,7 @@ export async function apiDelete(path) {
   return true;
 }
 
-// ✅ Default export (da radi: import http from "./http")
+// ✅ OVO MORA DA POSTOJI zbog: import http from "./http"
 export default {
   get: apiGet,
   post: apiPost,

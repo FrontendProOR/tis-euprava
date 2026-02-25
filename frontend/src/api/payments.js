@@ -1,7 +1,7 @@
-import http from "./http";
+import { apiPost } from "./http";
 
 // POST /api/payments
+// payload: { requestId, amount, reference }
 export async function createPayment(payload) {
-  const { data } = await http.post("/api/payments", payload);
-  return data;
+  return apiPost(`/api/payments`, payload);
 }

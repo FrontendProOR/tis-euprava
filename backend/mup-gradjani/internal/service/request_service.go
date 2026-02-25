@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("request not found")
-	ErrInvalidStatus = errors.New("invalid status")
+	ErrNotFound          = errors.New("request not found")
+	ErrInvalidStatus     = errors.New("invalid status")
+	ErrInvalidTransition = errors.New("invalid status transition")
 )
 
 type RequestService struct {
@@ -28,7 +29,7 @@ func (s *RequestService) CreateRequest(citizenID string, reqType string) (*domai
 		ID:          uuid.NewString(),
 		CitizenID:   citizenID,
 		Type:        reqType,
-		Status:      domain.RequestSubmitted,
+		Status:      domain.RequestPending,
 		SubmittedAt: time.Now().UTC(),
 	}
 
@@ -59,35 +60,65 @@ func (s *RequestService) GetByID(id string) (*domain.ServiceRequest, error) {
 // a da sistem čuva IN_PROCESS (kako je u domenu)
 func normalizeStatus(status string) domain.RequestStatus {
 	switch status {
-	case "IN_PROGRESS":
-		return domain.RequestInProcess
+	case "IN_PROCESS", "IN_PROGRESS", "INREVIEW", "IN-REVIEW":
+		return domain.RequestInReview
+	case "PENDING":
+		return domain.RequestPending
 	default:
 		return domain.RequestStatus(status)
 	}
 }
 
-func (s *RequestService) UpdateStatus(id string, status string) (*time.Time, error) {
+func isAllowedTransition(from, to domain.RequestStatus) bool {
+	switch from {
+	case domain.RequestPending:
+		return to == domain.RequestInReview
+	case domain.RequestInReview:
+		return to == domain.RequestApproved || to == domain.RequestRejected
+	case domain.RequestApproved:
+		return to == domain.RequestCompleted
+	case domain.RequestRejected, domain.RequestCompleted:
+		return false
+	default:
+		return false
+	}
+}
+
+// UpdateStatus menja status zahteva uz validaciju tranzicije (po dijagramu):
+// PENDING -> IN_REVIEW -> (APPROVED | REJECTED) -> COMPLETED
+// processed_at se setuje kada zahtev postane COMPLETED (završeno).
+func (s *RequestService) UpdateStatus(id string, status string) (*domain.ServiceRequest, error) {
 	newStatus := normalizeStatus(status)
 
-	// dozvoljavamo ova 3 kroz PATCH:
-	// IN_PROCESS (ili alias IN_PROGRESS), APPROVED, REJECTED
+	// dozvoljavamo samo statuse iz UML (po dijagramu)
 	switch newStatus {
-	case domain.RequestInProcess, domain.RequestApproved, domain.RequestRejected:
+	case domain.RequestPending, domain.RequestInReview, domain.RequestApproved, domain.RequestRejected, domain.RequestCompleted:
 		// ok
 	default:
 		return nil, ErrInvalidStatus
 	}
 
-	err := s.repo.UpdateStatus(id, newStatus)
+	// učitaj trenutni zahtev da bismo proverili tranziciju
+	current, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
 
-	// vraćamo processed_at samo kad je finalno stanje
-	if newStatus == domain.RequestApproved || newStatus == domain.RequestRejected {
-		now := time.Now().UTC()
-		return &now, nil
+	if !isAllowedTransition(current.Status, newStatus) {
+		return nil, ErrInvalidTransition
 	}
 
-	return nil, nil
+	var processedAt *time.Time
+	if newStatus == domain.RequestCompleted {
+		now := time.Now().UTC()
+		processedAt = &now
+	}
+
+	if err := s.repo.UpdateStatus(id, newStatus, processedAt); err != nil {
+		return nil, ErrNotFound
+	}
+
+	current.Status = newStatus
+	current.ProcessedAt = processedAt
+	return current, nil
 }

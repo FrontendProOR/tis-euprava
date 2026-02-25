@@ -8,8 +8,8 @@ import (
 	"tis-euprava/mup-gradjani/internal/service"
 )
 
-func RequestRouter(svc *service.RequestService, certSvc *service.CertificateService) http.HandlerFunc {
-	getOne := handlers.RequestByID(svc)
+func RequestRouter(svc *service.RequestService, paySvc *service.PaymentService, certSvc *service.CertificateService) http.HandlerFunc {
+	getOne := handlers.RequestByID(svc, paySvc)
 	patchStatus := handlers.UpdateRequestStatus(svc)
 	getCert := handlers.CertificateByRequestID(certSvc)
 

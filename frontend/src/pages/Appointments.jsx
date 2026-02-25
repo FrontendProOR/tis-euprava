@@ -1,5 +1,7 @@
 import { useState } from "react";
 import StatusBadge from "../components/StatusBadge";
+import CitizenSelect from "../components/CitizenSelect";
+import { useCitizenContext } from "../context/CitizenContext";
 import {
   createAppointment,
   getAppointmentsByCitizen,
@@ -7,22 +9,30 @@ import {
 } from "../api/appointments";
 
 export default function Appointments() {
+  const { selectedCitizenId } = useCitizenContext();
+
   const [form, setForm] = useState({
-    citizenId: "",
     policeStation: "",
     dateTime: "",
   });
 
-  const [searchId, setSearchId] = useState("");
   const [list, setList] = useState([]);
 
   async function create() {
-    await createAppointment(form);
+    if (!selectedCitizenId) {
+      alert("Izaberi građanina");
+      return;
+    }
+    await createAppointment({ ...form, citizenId: selectedCitizenId });
     alert("Termin zakazan");
   }
 
   async function load() {
-    const data = await getAppointmentsByCitizen(searchId);
+    if (!selectedCitizenId) {
+      alert("Izaberi građanina");
+      return;
+    }
+    const data = await getAppointmentsByCitizen(selectedCitizenId);
     setList(data);
   }
 
@@ -39,8 +49,7 @@ export default function Appointments() {
           <h3 className="card-t">Zakaži termin</h3>
         </div>
         <div className="card-c">
-          <input className="input" placeholder="Citizen ID"
-            onChange={(e) => setForm({ ...form, citizenId: e.target.value })} />
+          <CitizenSelect label="Građanin" required={true} />
           <input className="input" placeholder="Policijska stanica"
             onChange={(e) => setForm({ ...form, policeStation: e.target.value })} />
           <input className="input" type="datetime-local"
@@ -58,10 +67,8 @@ export default function Appointments() {
           <h3 className="card-t">Termini za građanina</h3>
         </div>
         <div className="card-c">
-          <div className="row">
-            <input className="input" placeholder="Citizen ID"
-              value={searchId}
-              onChange={(e) => setSearchId(e.target.value)} />
+          <CitizenSelect label="Građanin" required={true} />
+          <div className="row" style={{ marginTop: 10 }}>
             <button className="btn btn-secondary" onClick={load}>Prikaži</button>
           </div>
 

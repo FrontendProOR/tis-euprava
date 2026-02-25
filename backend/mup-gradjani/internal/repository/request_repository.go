@@ -1,6 +1,10 @@
 package repository
 
-import "tis-euprava/mup-gradjani/internal/domain"
+import (
+	"time"
+
+	"tis-euprava/mup-gradjani/internal/domain"
+)
 
 // RequestRepository definiše ugovor ka bazi
 type RequestRepository interface {
@@ -8,5 +12,7 @@ type RequestRepository interface {
 	GetAll() ([]domain.ServiceRequest, error)
 	FindByID(id string) (*domain.ServiceRequest, error)
 	FindByCitizenID(citizenID string) ([]domain.ServiceRequest, error)
-	UpdateStatus(id string, status domain.RequestStatus) error
+	// UpdateStatus menja status zahteva i (po potrebi) processed_at.
+	// processedAt treba da bude nil za ne-finalna stanja (SUBMITTED/IN_PROCESS).
+	UpdateStatus(id string, status domain.RequestStatus, processedAt *time.Time) error
 }

@@ -20,10 +20,8 @@ func RegisterRoutes(
 		_, _ = w.Write([]byte("OK"))
 	})
 
-	// ✅ MUP API - BEZ AUTH
-
-	mux.Handle("/api/requests", handlers.Requests(reqSvc))
-	mux.Handle("/api/requests/", RequestRouter(reqSvc, certSvc))
+	mux.Handle("/api/requests", handlers.Requests(reqSvc, paySvc))
+	mux.Handle("/api/requests/", RequestRouter(reqSvc, paySvc, certSvc))
 
 	mux.Handle("/api/citizens", handlers.Citizens(citizenSvc))
 	mux.Handle("/api/citizens/", handlers.CitizenByID(citizenSvc))

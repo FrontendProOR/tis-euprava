@@ -8,19 +8,24 @@ import RequestDetails from "./pages/RequestDetails";
 import Payments from "./pages/Payments";
 import Appointments from "./pages/Appointments";
 import Certificates from "./pages/Certificates";
+import OfficerPanel from "./pages/OfficerPanel";
+import { CitizenProvider } from "./context/CitizenContext";
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/citizens" element={<Citizens />} />
-        <Route path="/requests" element={<Requests />} />
-        <Route path="/requests/:id" element={<RequestDetails />} />
-        <Route path="/payments" element={<Payments />} />
-        <Route path="/appointments" element={<Appointments />} />
-        <Route path="/certificates" element={<Certificates />} />
-      </Route>
-    </Routes>
+    <CitizenProvider>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/citizens" element={<Citizens />} />
+          <Route path="/requests" element={<Requests />} />
+          <Route path="/requests/:id" element={<RequestDetails />} />
+          <Route path="/payments" element={<Payments />} />
+          <Route path="/appointments" element={<Appointments />} />
+          <Route path="/certificates" element={<Certificates />} />
+          <Route path="/officer" element={<OfficerPanel />} />
+        </Route>
+      </Routes>
+    </CitizenProvider>
   );
 }

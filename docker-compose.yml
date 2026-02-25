@@ -1,34 +1,4 @@
 services:
-  mup-service:
-    build: ./backend/mup-gradjani
-    container_name: mup-service
-    env_file: ./backend/mup-gradjani/.env
-    ports:
-      - "8002:8002"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  sso-service:
-    build: ./backend/sso-auth
-    container_name: sso-service
-    env_file: ./backend/sso-auth/.env
-    ports:
-      - "8001:8001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  zzs-service:
-    build: ./backend/zzs-statistika
-    container_name: zzs-service
-    env_file: ./backend/zzs-statistika/.env
-    ports:
-      - "8003:8003"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   postgres:
     image: postgres:15
     container_name: postgres
@@ -40,25 +10,71 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d euprava"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - euprava-network
+
+  mup-service:
+    build: ./backend/mup-gradjani
+    container_name: mup-service
+    env_file: ./backend/mup-gradjani/.env
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - euprava-network
+
+  sso-service:
+    build: ./backend/sso-auth
+    container_name: sso-service
+    env_file: ./backend/sso-auth/.env
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - euprava-network
+
+  zzs-service:
+    build: ./backend/zzs-statistika
+    container_name: zzs-service
+    env_file: ./backend/zzs-statistika/.env
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - euprava-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: frontend
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: "http://mup-service:8002"
+      VITE_API_URL: "http://localhost:8002"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
       - mup-service
+    networks:
+      - euprava-network
 
 volumes:
   postgres_data:
+
+networks:
+  euprava-network:
+    driver: bridge

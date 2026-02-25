@@ -125,11 +125,11 @@ func (r *PostgresRequestRepository) FindByCitizenID(citizenID string) ([]domain.
 // UpdateStatus:
 // - uvek update-uje status
 // - processed_at se setuje SAMO za APPROVED/REJECTED, inače NULL
-func (r *PostgresRequestRepository) UpdateStatus(id string, status domain.RequestStatus) error {
-	var processedAt any = nil
-
-	if status == domain.RequestApproved || status == domain.RequestRejected {
-		processedAt = time.Now().UTC()
+func (r *PostgresRequestRepository) UpdateStatus(id string, status domain.RequestStatus, processedAt *time.Time) error {
+	var processed any = nil
+	if processedAt != nil {
+		t := (*processedAt).UTC()
+		processed = t
 	}
 
 	query := `
@@ -138,7 +138,7 @@ func (r *PostgresRequestRepository) UpdateStatus(id string, status domain.Reques
 		WHERE id = $3
 	`
 
-	res, err := r.db.Exec(query, status, processedAt, id)
+	res, err := r.db.Exec(query, status, processed, id)
 	if err != nil {
 		return err
 	}

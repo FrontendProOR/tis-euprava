@@ -34,7 +34,7 @@ func UpdateRequestStatus(svc *service.RequestService) http.HandlerFunc {
 			return
 		}
 
-		processedAt, err := svc.UpdateStatus(id, dto.Status)
+		updated, err := svc.UpdateStatus(id, dto.Status)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -42,9 +42,9 @@ func UpdateRequestStatus(svc *service.RequestService) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":          id,
-			"status":      dto.Status,
-			"processedAt": processedAt,
+			"id":          updated.ID,
+			"status":      updated.Status,
+			"processedAt": updated.ProcessedAt,
 		})
 	}
 }

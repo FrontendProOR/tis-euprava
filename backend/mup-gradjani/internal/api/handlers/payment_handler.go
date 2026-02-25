@@ -8,9 +8,17 @@ import (
 )
 
 type payReq struct {
-	RequestID string  `json:"requestId"`
-	Amount    float64 `json:"amount"`
-	Reference string  `json:"reference"`
+	RequestID      string  `json:"requestId"`
+	RequestIDSnake string  `json:"request_id"`
+	Amount         float64 `json:"amount"`
+	Reference      string  `json:"reference"`
+}
+
+func (p payReq) requestID() string {
+	if p.RequestID != "" {
+		return p.RequestID
+	}
+	return p.RequestIDSnake
 }
 
 func Payments(svc *service.PaymentService) http.HandlerFunc {
@@ -24,7 +32,7 @@ func Payments(svc *service.PaymentService) http.HandlerFunc {
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
 		}
-		p, err := svc.Pay(req.RequestID, req.Amount, req.Reference)
+		p, err := svc.Pay(req.requestID(), req.Amount, req.Reference)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

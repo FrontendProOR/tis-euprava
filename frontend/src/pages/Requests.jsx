@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import StatusBadge from "../components/StatusBadge";
+import { labelRequestType } from "../utils/labels";
+import SearchInput from "../components/SearchInput";
 import { getRequests, createRequest } from "../api/requests";
-
-// Pomocne funkcije (lokalne, da ne zavisis od drugih fajlova)
-function shorten(id = "") {
-  if (!id) return "";
-  return id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
+import { createPayment } from "../api/payments";
+import CitizenSelect from "../components/CitizenSelect";
+import { useCitizenContext } from "../context/CitizenContext";
+import { fmtRSD, priceFor } from "../utils/pricing";
 
 function fmtDate(s) {
   if (!s) return "";
@@ -17,49 +17,47 @@ function fmtDate(s) {
 }
 
 export default function Requests() {
-  // Filters
-  const [filters, setFilters] = useState({
-    citizenId: "",
-    status: "",
-    type: "",
-  });
+  const { citizens, selectedCitizenId } = useCitizenContext();
 
-  // Data
+  function citizenLabelById(id) {
+    const c = citizens.find((x) => x.id === id);
+    if (!c) return "(nepoznat građanin)";
+    const fn = c.first_name ?? c.firstName ?? "";
+    const ln = c.last_name ?? c.lastName ?? "";
+    return `${fn} ${ln}`.trim() || "(bez imena)";
+  }
+
+  const [filters, setFilters] = useState({ status: "", type: "" });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState("");
 
-  // Modal (Novi zahtev)
   const [open, setOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    citizenId: "",
-    type: "ID_CARD",
-  });
+  const [createForm, setCreateForm] = useState({ type: "ID_CARD" });
 
   const statusOptions = useMemo(
-    () => ["SUBMITTED", "IN_PROCESS", "APPROVED", "REJECTED"],
+    () => ["PENDING", "IN_REVIEW", "APPROVED", "REJECTED", "COMPLETED"],
     []
   );
   const typeOptions = useMemo(
-    () => ["ID_CARD", "PASSPORT", "DRIVER_LICENSE"],
+    () => ["ID_CARD", "PASSPORT", "DRIVER_LICENSE", "RESIDENCE_CHANGE", "CITIZENSHIP"],
     []
   );
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedCitizenId]);
 
   async function load(overrideFilters) {
     setLoading(true);
     try {
       const used = overrideFilters ?? filters;
       const data = await getRequests({
-        citizenId: used.citizenId || undefined,
+        citizenId: selectedCitizenId || undefined,
         status: used.status || undefined,
         type: used.type || undefined,
       });
-
-      // backend može vratiti {items: []} ili direktno []
       const list = Array.isArray(data) ? data : data?.items ?? [];
       setRows(list);
     } catch (e) {
@@ -70,82 +68,91 @@ export default function Requests() {
     }
   }
 
+  const visibleRows = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((r) => {
+      const cid = r.citizenId ?? r.citizen_id;
+      const label = citizenLabelById(cid);
+      return (
+        String(r.type).toLowerCase().includes(term) ||
+        String(r.status).toLowerCase().includes(term) ||
+        String(label).toLowerCase().includes(term)
+      );
+    });
+  }, [rows, q, citizens]);
+
   async function applyFilters() {
     await load(filters);
   }
 
   async function submitNewRequest() {
-    if (!createForm.citizenId.trim()) {
-      alert("Unesi citizenId");
+    if (!selectedCitizenId) {
+      alert("Izaberi građanina");
       return;
     }
     try {
       await createRequest({
-        citizenId: createForm.citizenId.trim(),
+        citizenId: selectedCitizenId,
         type: createForm.type,
       });
       setOpen(false);
-      setCreateForm((p) => ({ ...p, citizenId: "" }));
       await load(filters);
-      alert("Zahtev uspešno kreiran");
+      alert("Zahtev uspešno kreiran (status: PENDING)");
     } catch (e) {
       console.error(e);
       alert(e?.response?.data?.message ?? "Greška pri kreiranju zahteva");
     }
   }
 
-  async function copy(text) {
+  async function payNow(r) {
     try {
-      await navigator.clipboard.writeText(text);
-      alert("Kopirano!");
-    } catch {
-      alert("Ne mogu da kopiram (browser dozvole)");
+      const amount = Number(r.price ?? priceFor(r.type));
+      await createPayment({
+        requestId: r.id,
+        amount,
+        reference: "WEB-001",
+      });
+      await load(filters);
+      alert("Uplata evidentirana. Status je automatski ažuriran.");
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message ?? "Greška pri uplati");
     }
   }
 
   return (
     <div className="grid" style={{ gap: 16 }}>
-      {/* Header */}
-      <div className="row row-between">
+      <div className="row row-between" style={{ alignItems: "flex-end" }}>
         <div>
           <h1 className="h1">Zahtevi</h1>
           <p className="p">
-            Filteri + tabela zahteva. Otvori detalje da uradiš status → uplatu → sertifikat.
+            Tok: građanin → zahtev (PENDING) → uplata → status (APPROVED/REJECTED) → sertifikat.
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={() => setOpen(true)}>
-          + Novi zahtev
-        </button>
+        <div className="row" style={{ gap: 10 }}>
+          <SearchInput value={q} onChange={setQ} placeholder="Pretraga zahteva (id, građanin, tip, status)..." />
+          <button className="btn btn-primary" onClick={() => setOpen(true)}>
+            + Novi zahtev
+          </button>
+        </div>
       </div>
 
-      {/* Filter bar */}
       <div className="card">
         <div className="card-h">
           <h3 className="card-t">Filteri</h3>
         </div>
         <div className="card-c">
           <div className="grid grid-3" style={{ alignItems: "end" }}>
-            <div>
-              <div className="small" style={{ marginBottom: 6 }}>Citizen ID (opciono)</div>
-              <input
-                className="input"
-                placeholder="npr. 8b3d..."
-                value={filters.citizenId}
-                onChange={(e) =>
-                  setFilters((p) => ({ ...p, citizenId: e.target.value }))
-                }
-              />
-            </div>
+            <CitizenSelect label="Građanin (filter)" required={false} />
 
             <div>
               <div className="small" style={{ marginBottom: 6 }}>Status</div>
               <select
                 className="select"
                 value={filters.status}
-                onChange={(e) =>
-                  setFilters((p) => ({ ...p, status: e.target.value }))
-                }
+                onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}
               >
                 <option value="">Svi</option>
                 {statusOptions.map((s) => (
@@ -159,9 +166,7 @@ export default function Requests() {
               <select
                 className="select"
                 value={filters.type}
-                onChange={(e) =>
-                  setFilters((p) => ({ ...p, type: e.target.value }))
-                }
+                onChange={(e) => setFilters((p) => ({ ...p, type: e.target.value }))}
               >
                 <option value="">Svi</option>
                 {typeOptions.map((t) => (
@@ -172,13 +177,11 @@ export default function Requests() {
           </div>
 
           <div className="row" style={{ marginTop: 12 }}>
-            <button className="btn btn-secondary" onClick={applyFilters}>
-              Primeni
-            </button>
+            <button className="btn btn-secondary" onClick={applyFilters}>Primeni</button>
             <button
               className="btn btn-outline"
               onClick={() => {
-                const reset = { citizenId: "", status: "", type: "" };
+                const reset = { status: "", type: "" };
                 setFilters(reset);
                 load(reset);
               }}
@@ -187,13 +190,12 @@ export default function Requests() {
             </button>
 
             <div className="small" style={{ marginLeft: "auto" }}>
-              {loading ? "Učitavanje..." : `Ukupno: ${rows.length}`}
+              {loading ? "Učitavanje..." : `Prikazano: ${visibleRows.length} / ${rows.length}`}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Table */}
       <div className="card">
         <div className="card-h">
           <h3 className="card-t">Lista zahteva</h3>
@@ -203,38 +205,32 @@ export default function Requests() {
           <table className="table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Citizen</th>
-                <th>Type</th>
+                <th>Građanin</th>
+                <th>Tip</th>
+                <th>Cena</th>
                 <th>Status</th>
-                <th>Submitted</th>
-                <th>Processed</th>
+                <th>Plaćeno</th>
+                <th>Podnet</th>
+                <th>Obrađen</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {visibleRows.map((r) => (
                 <tr key={r.id}>
-                  <td>
-                    <div className="row">
-                      <span style={{ fontWeight: 800 }}>{shorten(r.id)}</span>
-                      <button
-                        className="btn btn-outline"
-                        style={{ padding: "6px 10px" }}
-                        onClick={() => copy(r.id)}
-                      >
-                        Copy
+                  <td style={{ color: "var(--muted)" }}>{citizenLabelById(r.citizenId ?? r.citizen_id)}</td>
+                  <td>{labelRequestType(r.type)}</td>
+                  <td>{fmtRSD(r.price ?? priceFor(r.type))}</td>
+                  <td><StatusBadge status={r.status} /></td>
+                  <td>{r.paid ? <StatusBadge status="PAID" /> : <StatusBadge status="UNPAID" />}</td>
+                  <td style={{ color: "var(--muted)" }}>{fmtDate(r.submittedAt ?? r.submitted_at)}</td>
+                  <td style={{ color: "var(--muted)" }}>{fmtDate(r.processedAt ?? r.processed_at)}</td>
+                  <td style={{ whiteSpace: "nowrap", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    {!r.paid && r.status !== "REJECTED" && (
+                      <button className="btn btn-secondary" onClick={() => payNow(r)}>
+                        Plati
                       </button>
-                    </div>
-                  </td>
-                  <td style={{ color: "var(--muted)" }}>{r.citizenId}</td>
-                  <td>{r.type}</td>
-                  <td>
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td style={{ color: "var(--muted)" }}>{fmtDate(r.submittedAt)}</td>
-                  <td style={{ color: "var(--muted)" }}>{fmtDate(r.processedAt)}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                    )}
                     <Link to={`/requests/${r.id}`} className="btn btn-primary" style={{ padding: "8px 12px" }}>
                       Detalji
                     </Link>
@@ -242,10 +238,10 @@ export default function Requests() {
                 </tr>
               ))}
 
-              {!loading && rows.length === 0 && (
+              {!loading && visibleRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ color: "var(--muted)" }}>
-                    Nema rezultata. Probaj da kreiraš novi zahtev ili promeni filtere.
+                  <td colSpan={8} style={{ color: "var(--muted)" }}>
+                    Nema rezultata. Izaberi građanina → kreiraj novi zahtev.
                   </td>
                 </tr>
               )}
@@ -254,7 +250,6 @@ export default function Requests() {
         </div>
       </div>
 
-      {/* Modal: Novi zahtev */}
       {open && (
         <div
           role="dialog"
@@ -280,36 +275,30 @@ export default function Requests() {
             </div>
             <div className="card-c">
               <div className="grid" style={{ gap: 10 }}>
-                <div>
-                  <div className="small" style={{ marginBottom: 6 }}>Citizen ID</div>
-                  <input
-                    className="input"
-                    placeholder="Unesi citizenId"
-                    value={createForm.citizenId}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({ ...p, citizenId: e.target.value }))
-                    }
-                  />
-                </div>
+                <CitizenSelect label="Građanin" required={true} />
 
                 <div>
                   <div className="small" style={{ marginBottom: 6 }}>Tip</div>
                   <select
                     className="select"
                     value={createForm.type}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({ ...p, type: e.target.value }))
-                    }
+                    onChange={(e) => setCreateForm((p) => ({ ...p, type: e.target.value }))}
                   >
                     {typeOptions.map((t) => (
-                      <option key={t} value={t}>{t}</option>
+                      <option key={t} value={t}>
+                        {t} · {fmtRSD(priceFor(t))}
+                      </option>
                     ))}
                   </select>
                 </div>
 
+                <div className="small" style={{ color: "var(--muted)" }}>
+                  Cena: <b>{fmtRSD(priceFor(createForm.type))}</b> · početni status: <b>PENDING</b>
+                </div>
+
                 <div className="row" style={{ marginTop: 6 }}>
                   <button className="btn btn-primary" onClick={submitNewRequest}>
-                    Pošalji zahtev
+                    Kreiraj zahtev
                   </button>
                   <button className="btn btn-secondary" onClick={() => setOpen(false)}>
                     Otkaži
@@ -317,7 +306,7 @@ export default function Requests() {
                 </div>
 
                 <div className="small">
-                  Tok demo: napravi građanina → kreiraj zahtev → Detalji → status → uplata → sertifikat.
+                  Nakon uplate, status se automatski ažurira (APPROVED ako je uplaćeno dovoljno, inače REJECTED).
                 </div>
               </div>
             </div>
